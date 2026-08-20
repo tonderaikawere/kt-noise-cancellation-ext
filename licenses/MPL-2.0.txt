@@ -1,0 +1,24 @@
+Mozilla Public License Version 2.0
+==================================
+
+1. Definitions
+--------------
+
+[Definitions omitted for brevity]
+
+2. License Grants
+-----------------
+
+2.1. Grants
+Each Contributor hereby grants You a world-wide, royalty-free,
+non-exclusive, license under its Applicable Patent Rights and Copyrights
+to use, reproduce, make available, modify, display, perform, distribute,
+and otherwise exploit its Contributions, either on an unmodified basis, with
+Modifications, or as part of a Larger Work.
+
+2.2. Effective Date
+The licenses granted in Section 2.1 with respect to any Contribution become
+effective for each Contribution on the date the Contributor first
+distributes such Contribution.
+
+[Refer to official MPL 2.0 for full terms]
