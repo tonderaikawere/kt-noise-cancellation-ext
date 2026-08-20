@@ -4,6 +4,12 @@ let audioContext: AudioContext | null = null;
 let mediaStream: MediaStream | null = null;
 let sourceNode: MediaStreamAudioSourceNode | null = null;
 
+// DSP Nodes declaration
+let highPassFilter: BiquadFilterNode | null = null;
+let presenceFilter: BiquadFilterNode | null = null;
+let compressorNode: DynamicsCompressorNode | null = null;
+let volumeGainNode: GainNode | null = null;
+
 function initAudioContext() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -15,16 +21,42 @@ function initAudioContext() {
   return audioContext;
 }
 
+// Create DSP Nodes for the enhancement pipeline
+function createDSPNodes(ctx: AudioContext) {
+  // 1. High Pass Filter to cut rumble / ambient AC hum (< 80Hz)
+  highPassFilter = ctx.createBiquadFilter();
+  highPassFilter.type = 'highpass';
+  highPassFilter.frequency.setValueAtTime(80, ctx.currentTime);
+  highPassFilter.Q.setValueAtTime(0.707, ctx.currentTime);
+
+  // 2. Presence filter (peaking filter around 3kHz to boost voice clarity)
+  presenceFilter = ctx.createBiquadFilter();
+  presenceFilter.type = 'peaking';
+  presenceFilter.frequency.setValueAtTime(3000, ctx.currentTime);
+  presenceFilter.Q.setValueAtTime(1.0, ctx.currentTime);
+  presenceFilter.gain.setValueAtTime(3, ctx.currentTime); // default boost
+
+  // 3. Dynamics Compressor (AGC / soft limiter) to make speech consistent
+  compressorNode = ctx.createDynamicsCompressor();
+  compressorNode.threshold.setValueAtTime(-24, ctx.currentTime);
+  compressorNode.knee.setValueAtTime(30, ctx.currentTime);
+  compressorNode.ratio.setValueAtTime(12, ctx.currentTime);
+  compressorNode.attack.setValueAtTime(0.003, ctx.currentTime);
+  compressorNode.release.setValueAtTime(0.25, ctx.currentTime);
+
+  // 4. Volume Gain Node (booster)
+  volumeGainNode = ctx.createGain();
+  volumeGainNode.gain.setValueAtTime(1.0, ctx.currentTime);
+}
+
 async function handleStartCapture(streamId: string) {
   try {
     const ctx = initAudioContext();
 
-    // Stop previous capture stream if any exists
     if (mediaStream) {
       mediaStream.getTracks().forEach(track => track.stop());
     }
 
-    // Capture the tab audio stream using the stream ID passed from background
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         mandatory: {
@@ -36,7 +68,8 @@ async function handleStartCapture(streamId: string) {
     } as any);
 
     sourceNode = ctx.createMediaStreamSource(mediaStream);
-    console.log('Successfully captured tab stream in offscreen.');
+    createDSPNodes(ctx);
+    console.log('Successfully captured tab stream & initialized DSP nodes.');
   } catch (err) {
     console.error('Failed to getUserMedia for tab capture stream ID:', err);
   }
