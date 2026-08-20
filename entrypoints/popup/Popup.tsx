@@ -16,9 +16,16 @@ export default function Popup() {
     }).catch(err => console.error('Error loading storage:', err));
   }, []);
 
-  // Save changes to local storage when state changes
+  // Save changes to local storage and notify background when state changes
   useEffect(() => {
     browser.storage.local.set({ enabled, noiseGate, voiceBoost, volume })
+      .then(() => {
+        // Send message to background service worker
+        browser.runtime.sendMessage({
+          type: 'UPDATE_STATE',
+          payload: { enabled, noiseGate, voiceBoost, volume }
+        }).catch(err => console.warn('Background script not loaded yet:', err));
+      })
       .catch(err => console.error('Error saving storage:', err));
   }, [enabled, noiseGate, voiceBoost, volume]);
 
