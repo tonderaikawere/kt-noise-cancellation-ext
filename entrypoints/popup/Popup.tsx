@@ -2,9 +2,25 @@ import React, { useState, useEffect } from 'react';
 
 export default function Popup() {
   const [enabled, setEnabled] = useState(false);
-  const [noiseGate, setNoiseGate] = useState(50); // percentage (0-100)
-  const [voiceBoost, setVoiceBoost] = useState(30); // percentage (0-100)
-  const [volume, setVolume] = useState(100); // percentage (0-200)
+  const [noiseGate, setNoiseGate] = useState(50); 
+  const [voiceBoost, setVoiceBoost] = useState(30); 
+  const [volume, setVolume] = useState(100); 
+
+  // Load saved state from local storage on mount
+  useEffect(() => {
+    browser.storage.local.get(['enabled', 'noiseGate', 'voiceBoost', 'volume']).then((res) => {
+      if (res.enabled !== undefined) setEnabled(res.enabled);
+      if (res.noiseGate !== undefined) setNoiseGate(res.noiseGate);
+      if (res.voiceBoost !== undefined) setVoiceBoost(res.voiceBoost);
+      if (res.volume !== undefined) setVolume(res.volume);
+    }).catch(err => console.error('Error loading storage:', err));
+  }, []);
+
+  // Save changes to local storage when state changes
+  useEffect(() => {
+    browser.storage.local.set({ enabled, noiseGate, voiceBoost, volume })
+      .catch(err => console.error('Error saving storage:', err));
+  }, [enabled, noiseGate, voiceBoost, volume]);
 
   return (
     <div className="container">
