@@ -117,7 +117,6 @@ function connectPipeline() {
     return;
   }
 
-  // Route: Source -> High Pass -> Noise Gate -> Presence Boost -> Compressor -> Volume Gain -> Destination
   sourceNode.connect(highPassFilter);
   highPassFilter.connect(noiseGateNode);
   noiseGateNode.connect(presenceFilter);
@@ -150,6 +149,15 @@ async function handleStartCapture(streamId: string) {
     createDSPNodes(ctx);
     await initNoiseGate(ctx);
     connectPipeline();
+
+    // Fetch initial parameters from storage and apply them
+    const res = await browser.storage.local.get(['noiseGate', 'voiceBoost', 'volume']);
+    handleStateChange({
+      enabled: true,
+      noiseGate: res.noiseGate ?? 50,
+      voiceBoost: res.voiceBoost ?? 30,
+      volume: res.volume ?? 100
+    });
   } catch (err) {
     console.error('Failed to getUserMedia for tab capture stream ID:', err);
   }
@@ -166,5 +174,33 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function handleStateChange(payload: { enabled: boolean; noiseGate: number; voiceBoost: number; volume: number }) {
-  console.log('Settings changed:', payload);
+  if (!audioContext) return;
+  const ctx = audioContext;
+
+  // 1. Map volume booster (0% - 200% -> 0.0 - 2.0 gain value)
+  if (volumeGainNode) {
+    const gainVal = payload.volume / 100;
+    volumeGainNode.gain.setValueAtTime(gainVal, ctx.currentTime);
+  }
+
+  // 2. Map voice presence boost (0% - 100% -> 0dB - 10dB boost peaking filter gain)
+  if (presenceFilter) {
+    const presenceGain = (payload.voiceBoost / 100) * 10;
+    presenceFilter.gain.setValueAtTime(presenceGain, ctx.currentTime);
+  }
+
+  // 3. Map noise gate threshold (0% - 100% -> 0.0 - 0.04 threshold amplitude)
+  if (noiseGateNode) {
+    const thresholdVal = (payload.noiseGate / 100) * 0.04;
+    // @ts-ignore
+    if (noiseGateNode.threshold) {
+      // @ts-ignore
+      noiseGateNode.threshold.setValueAtTime(thresholdVal, ctx.currentTime);
+    } else if ((noiseGateNode as any).setThreshold) {
+      // Fallback custom ScriptProcessor setter
+      (noiseGateNode as any).setThreshold(thresholdVal);
+    }
+  }
+
+  console.log(`Applied parameters: Volume=${payload.volume}%, PresenceBoost=${payload.voiceBoost}%, NoiseGateThresh=${payload.noiseGate}%`);
 }
