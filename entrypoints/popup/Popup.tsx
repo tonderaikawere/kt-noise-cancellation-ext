@@ -5,6 +5,7 @@ export default function Popup() {
   const [noiseGate, setNoiseGate] = useState(50); 
   const [voiceBoost, setVoiceBoost] = useState(30); 
   const [volume, setVolume] = useState(100); 
+  const [compatibilityWarning, setCompatibilityWarning] = useState('');
 
   // Load saved state from local storage on mount
   useEffect(() => {
@@ -14,6 +15,13 @@ export default function Popup() {
       if (res.voiceBoost !== undefined) setVoiceBoost(res.voiceBoost);
       if (res.volume !== undefined) setVolume(res.volume);
     }).catch(err => console.error('Error loading storage:', err));
+
+    // Safari/Firefox compatibility check for tabCapture
+    // @ts-ignore
+    const isChrome = typeof chrome !== 'undefined' && chrome.tabCapture;
+    if (!isChrome) {
+      setCompatibilityWarning('Tab capture is only fully supported on Chromium-based browsers. Falling back to mic-only mode.');
+    }
   }, []);
 
   // Save changes to local storage and notify background when state changes
@@ -35,7 +43,6 @@ export default function Popup() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set internal canvas resolution to match display size
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
 
@@ -60,7 +67,6 @@ export default function Popup() {
         const percent = frequencies[i] / 255;
         const barHeight = percent * canvas.height;
 
-        // Draw bar gradient color matching our theme
         const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
         gradient.addColorStop(0, '#60a5fa');
         gradient.addColorStop(1, '#3b82f6');
@@ -93,6 +99,12 @@ export default function Popup() {
           <p className="subtitle">by Kawerify Tech</p>
         </div>
       </div>
+
+      {compatibilityWarning && (
+        <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#f87171', padding: '8px', borderRadius: '6px', fontSize: '11px' }}>
+          ⚠️ {compatibilityWarning}
+        </div>
+      )}
 
       <div className="control-panel">
         <div className="toggle-container">
