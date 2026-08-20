@@ -1,3 +1,7 @@
+/**
+ * KT Noise Cancellation Extension
+ * Background Service Worker
+ */
 import { defineBackground } from 'wxt/sandbox';
 
 let isCreatingOffscreen = false;
