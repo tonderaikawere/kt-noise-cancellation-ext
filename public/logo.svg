@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="24" fill="#0F172A"/>
+  <!-- Soundwave visualizer lines -->
+  <rect x="28" y="44" width="8" height="40" rx="4" fill="#3B82F6"/>
+  <rect x="44" y="24" width="8" height="80" rx="4" fill="#3B82F6"/>
+  <rect x="60" y="34" width="8" height="60" rx="4" fill="#60A5FA"/>
+  <rect x="76" y="54" width="8" height="20" rx="4" fill="#EF4444"/>
+  <rect x="92" y="40" width="8" height="48" rx="4" fill="#10B981"/>
+  <!-- Diagonal cancellation line -->
+  <line x1="20" y1="108" x2="108" y2="20" stroke="#EF4444" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
+</svg>
