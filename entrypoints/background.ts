@@ -5,7 +5,6 @@ let isCreatingOffscreen = false;
 export default defineBackground(() => {
   console.log('KT Noise Cancellation background worker initialized.');
 
-  // Handle messages from Popup or Offscreen
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'UPDATE_STATE') {
       handleStateUpdate(message.payload);
@@ -19,11 +18,19 @@ async function handleStateUpdate(payload: { enabled: boolean; noiseGate: number;
   const hasOffscreen = await hasOffscreenDocument();
 
   if (enabled) {
+    // Check if browser supports offscreen (not supported on Firefox / Safari)
+    // @ts-ignore
+    const isSupported = typeof chrome !== 'undefined' && chrome.offscreen && chrome.tabCapture;
+    if (!isSupported) {
+      console.warn('Offscreen document or tab capture is not supported on this browser context.');
+      // Handle fallback directly or message popup
+      return;
+    }
+
     if (!hasOffscreen && !isCreatingOffscreen) {
       isCreatingOffscreen = true;
       try {
         await setupOffscreenDocument();
-        // Allow offscreen some time to load before sending stream ID
         await new Promise((resolve) => setTimeout(resolve, 500));
         await captureAndForwardStream();
       } catch (err) {
@@ -33,7 +40,6 @@ async function handleStateUpdate(payload: { enabled: boolean; noiseGate: number;
       }
     }
     
-    // Sync state parameters to offscreen
     await browser.runtime.sendMessage({
       type: 'OFFSCREEN_STATE_CHANGE',
       payload
@@ -54,16 +60,14 @@ async function captureAndForwardStream() {
     return;
   }
 
-  // Obtain media stream ID for tab capture
   // @ts-ignore
   const streamId = await chrome.tabCapture.getMediaStreamId({
     targetTabId: tab.id,
-    consumerTabId: tab.id // Required in MV3
+    consumerTabId: tab.id 
   });
 
   console.log('Obtained tab audio stream ID:', streamId);
 
-  // Send stream ID to offscreen document
   await browser.runtime.sendMessage({
     type: 'START_CAPTURE',
     streamId
@@ -72,7 +76,7 @@ async function captureAndForwardStream() {
 
 async function hasOffscreenDocument(): Promise<boolean> {
   // @ts-ignore
-  if ('getContexts' in chrome.runtime) {
+  if (typeof chrome !== 'undefined' && chrome.runtime && 'getContexts' in chrome.runtime) {
     // @ts-ignore
     const contexts = await chrome.runtime.getContexts({
       contextTypes: ['OFFSCREEN_DOCUMENT'],
@@ -84,7 +88,7 @@ async function hasOffscreenDocument(): Promise<boolean> {
 
 async function setupOffscreenDocument() {
   // @ts-ignore
-  if (chrome.offscreen) {
+  if (typeof chrome !== 'undefined' && chrome.offscreen) {
     // @ts-ignore
     await chrome.offscreen.createDocument({
       url: 'entrypoints/offscreen/index.html',
@@ -98,7 +102,7 @@ async function setupOffscreenDocument() {
 
 async function closeOffscreenDocument() {
   // @ts-ignore
-  if (chrome.offscreen) {
+  if (typeof chrome !== 'undefined' && chrome.offscreen) {
     // @ts-ignore
     await chrome.offscreen.closeDocument();
     console.log('Offscreen document closed.');
