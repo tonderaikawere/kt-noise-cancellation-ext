@@ -20,7 +20,6 @@ export default function Popup() {
   useEffect(() => {
     browser.storage.local.set({ enabled, noiseGate, voiceBoost, volume })
       .then(() => {
-        // Send message to background service worker
         browser.runtime.sendMessage({
           type: 'UPDATE_STATE',
           payload: { enabled, noiseGate, voiceBoost, volume }
@@ -28,6 +27,54 @@ export default function Popup() {
       })
       .catch(err => console.error('Error saving storage:', err));
   }, [enabled, noiseGate, voiceBoost, volume]);
+
+  // Real-time canvas visualizer rendering
+  useEffect(() => {
+    const canvas = document.getElementById('visualizer') as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set internal canvas resolution to match display size
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+
+    const bc = new BroadcastChannel('kt-audio-visuals');
+    
+    bc.onmessage = (event) => {
+      if (!enabled) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      
+      const { frequencies } = event.data;
+      if (!frequencies) return;
+
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const barWidth = (canvas.width / frequencies.length) * 1.5;
+      let x = 0;
+
+      for (let i = 0; i < frequencies.length; i++) {
+        const percent = frequencies[i] / 255;
+        const barHeight = percent * canvas.height;
+
+        // Draw bar gradient color matching our theme
+        const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
+        gradient.addColorStop(0, '#60a5fa');
+        gradient.addColorStop(1, '#3b82f6');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
+        x += barWidth;
+      }
+    };
+
+    return () => {
+      bc.close();
+    };
+  }, [enabled]);
 
   return (
     <div className="container">
