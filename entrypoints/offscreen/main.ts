@@ -10,6 +10,11 @@ let presenceFilter: BiquadFilterNode | null = null;
 let compressorNode: DynamicsCompressorNode | null = null;
 let volumeGainNode: GainNode | null = null;
 let noiseGateNode: AudioNode | null = null;
+let analyserNode: AnalyserNode | null = null;
+
+// BroadcastChannel to stream visualization data to popup
+const visualChannel = new BroadcastChannel('kt-audio-visuals');
+let visualLoopActive = false;
 
 // Inline Noise Gate AudioWorklet code
 const noiseGateWorkletCode = `
@@ -72,6 +77,9 @@ function createDSPNodes(ctx: AudioContext) {
 
   volumeGainNode = ctx.createGain();
   volumeGainNode.gain.setValueAtTime(1.0, ctx.currentTime);
+
+  analyserNode = ctx.createAnalyser();
+  analyserNode.fftSize = 64; // Small size for fast visualization updates
 }
 
 // Initialize Noise Gate AudioWorklet
@@ -112,7 +120,7 @@ async function initNoiseGate(ctx: AudioContext) {
 
 // Build and connect the pipeline
 function connectPipeline() {
-  if (!sourceNode || !highPassFilter || !noiseGateNode || !presenceFilter || !compressorNode || !volumeGainNode || !audioContext) {
+  if (!sourceNode || !highPassFilter || !noiseGateNode || !presenceFilter || !compressorNode || !volumeGainNode || !analyserNode || !audioContext) {
     console.error('Cannot connect pipeline: some nodes are not initialized.');
     return;
   }
@@ -122,9 +130,31 @@ function connectPipeline() {
   noiseGateNode.connect(presenceFilter);
   presenceFilter.connect(compressorNode);
   compressorNode.connect(volumeGainNode);
-  volumeGainNode.connect(audioContext.destination);
+  volumeGainNode.connect(analyserNode);
+  analyserNode.connect(audioContext.destination);
 
   console.log('Audio pipeline routing successfully established.');
+  startVisualLoop();
+}
+
+function startVisualLoop() {
+  if (visualLoopActive) return;
+  visualLoopActive = true;
+
+  const dataArray = new Uint8Array(analyserNode?.frequencyBinCount || 32);
+  
+  function draw() {
+    if (!visualLoopActive || !analyserNode) return;
+    
+    analyserNode.getByteFrequencyData(dataArray);
+    // Convert Uint8Array to a normal number array to pass via BroadcastChannel
+    const frequencies = Array.from(dataArray);
+    visualChannel.postMessage({ frequencies });
+    
+    requestAnimationFrame(draw);
+  }
+  
+  requestAnimationFrame(draw);
 }
 
 async function handleStartCapture(streamId: string) {
@@ -132,6 +162,7 @@ async function handleStartCapture(streamId: string) {
     const ctx = initAudioContext();
 
     if (mediaStream) {
+      visualLoopActive = false;
       mediaStream.getTracks().forEach(track => track.stop());
     }
 
@@ -177,19 +208,16 @@ function handleStateChange(payload: { enabled: boolean; noiseGate: number; voice
   if (!audioContext) return;
   const ctx = audioContext;
 
-  // 1. Map volume booster (0% - 200% -> 0.0 - 2.0 gain value)
   if (volumeGainNode) {
     const gainVal = payload.volume / 100;
     volumeGainNode.gain.setValueAtTime(gainVal, ctx.currentTime);
   }
 
-  // 2. Map voice presence boost (0% - 100% -> 0dB - 10dB boost peaking filter gain)
   if (presenceFilter) {
     const presenceGain = (payload.voiceBoost / 100) * 10;
     presenceFilter.gain.setValueAtTime(presenceGain, ctx.currentTime);
   }
 
-  // 3. Map noise gate threshold (0% - 100% -> 0.0 - 0.04 threshold amplitude)
   if (noiseGateNode) {
     const thresholdVal = (payload.noiseGate / 100) * 0.04;
     // @ts-ignore
@@ -197,7 +225,6 @@ function handleStateChange(payload: { enabled: boolean; noiseGate: number; voice
       // @ts-ignore
       noiseGateNode.threshold.setValueAtTime(thresholdVal, ctx.currentTime);
     } else if ((noiseGateNode as any).setThreshold) {
-      // Fallback custom ScriptProcessor setter
       (noiseGateNode as any).setThreshold(thresholdVal);
     }
   }
