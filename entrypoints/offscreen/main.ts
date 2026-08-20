@@ -82,10 +82,9 @@ async function initNoiseGate(ctx: AudioContext) {
     await ctx.audioWorklet.addModule(url);
     // @ts-ignore
     noiseGateNode = new AudioWorkletNode(ctx, 'noise-gate-processor');
-    console.log('AudioWorklet Noise Gate loaded successfully.');
+    console.log('AudioWorklet Noise Gate loaded.');
   } catch (err) {
-    console.warn('AudioWorklet failed to load, falling back to ScriptProcessor:', err);
-    // Fallback to ScriptProcessorNode for older engines or restricted contexts
+    console.warn('AudioWorklet failed, using ScriptProcessor fallback:', err);
     const bufferSize = 4096;
     let threshold = 0.005;
     
@@ -103,13 +102,30 @@ async function initNoiseGate(ctx: AudioContext) {
       }
     };
     
-    // Attach custom setter for threshold update
     (scriptNode as any).setThreshold = (val: number) => {
       threshold = val;
     };
     
     noiseGateNode = scriptNode;
   }
+}
+
+// Build and connect the pipeline
+function connectPipeline() {
+  if (!sourceNode || !highPassFilter || !noiseGateNode || !presenceFilter || !compressorNode || !volumeGainNode || !audioContext) {
+    console.error('Cannot connect pipeline: some nodes are not initialized.');
+    return;
+  }
+
+  // Route: Source -> High Pass -> Noise Gate -> Presence Boost -> Compressor -> Volume Gain -> Destination
+  sourceNode.connect(highPassFilter);
+  highPassFilter.connect(noiseGateNode);
+  noiseGateNode.connect(presenceFilter);
+  presenceFilter.connect(compressorNode);
+  compressorNode.connect(volumeGainNode);
+  volumeGainNode.connect(audioContext.destination);
+
+  console.log('Audio pipeline routing successfully established.');
 }
 
 async function handleStartCapture(streamId: string) {
@@ -133,7 +149,7 @@ async function handleStartCapture(streamId: string) {
     sourceNode = ctx.createMediaStreamSource(mediaStream);
     createDSPNodes(ctx);
     await initNoiseGate(ctx);
-    console.log('Successfully captured tab stream & initialized DSP nodes & Noise Gate.');
+    connectPipeline();
   } catch (err) {
     console.error('Failed to getUserMedia for tab capture stream ID:', err);
   }
